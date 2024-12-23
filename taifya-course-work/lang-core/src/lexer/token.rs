@@ -49,7 +49,8 @@ pub enum Token {
     Ampersand, // &
 
     // Ключевые слова
-    Val, // Val
+    Val, // val
+    Var, // var
     Begin, // begin
     End, // end
     If, // if
@@ -86,6 +87,7 @@ impl Token {
     pub fn is_reserved_word(&self) -> bool {
         match self {
             Token::Val
+            | Token::Var
             | Token::Begin
             | Token::End
             | Token::If
@@ -94,16 +96,14 @@ impl Token {
             | Token::For
             | Token::Do
             | Token::While
-            | Token::Next 
-            | Token::Val
+            | Token::Next
             | Token::Enter 
-            | Token::Displ 
-            | Token::Enter => true,
+            | Token::Displ => true,
             _ => false
         }
     }
 
-    pub fn is_Valiable_type(&self) -> bool {
+    pub fn is_variable_type(&self) -> bool {
         match self {
             Token::Hashtag //13
             | Token::At //14
@@ -164,7 +164,8 @@ impl Token {
             Token::Hashtag => "#".to_string(),
             Token::At => "@".to_string(),
             Token::Ampersand => "&".to_string(),
-            Token::Val => "Val".to_string(),
+            Token::Val => "val".to_string(),
+            Token::Var => "var".to_string(),
             Token::Begin => "begin".to_string(),
             Token::End  => "end".to_string(),
             Token::If => "if".to_string(),
@@ -174,7 +175,6 @@ impl Token {
             Token::Do => "do".to_string(),
             Token::While => "while".to_string(),
             Token::Next => "next".to_string(),
-            Token::Val  => "val".to_string(),
             Token::Enter => "enter".to_string(),
             Token::Displ => "displ".to_string(),
             Token::True => "true".to_string(),
@@ -267,7 +267,7 @@ impl Token {
             Token::Do => TableElement::from(0, 10, self.clone()),
             Token::While => TableElement::from(0, 11, self.clone()),
             Token::Next => TableElement::from(0, 12, self.clone()),
-            Token::Val  => TableElement::from(0, 13, self.clone()),
+            Token::Var  => TableElement::from(0, 13, self.clone()),
             Token::Enter => TableElement::from(0, 14, self.clone()),
             Token::Displ => TableElement::from(0, 15, self.clone()),
             Token::True => TableElement::from(0, 16, self.clone()),
