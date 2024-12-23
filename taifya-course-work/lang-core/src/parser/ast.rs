@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use crate::{
-    lexer::prelude::{Token, LexResult}, 
+    lexer::{prelude::{LexResult, Token}, table_element::{DisplayTable, TableElement}}, 
     parser::prelude::{parse_error, InfixParse, Parse, ParseErrorType, Precedence}, 
     utils::prelude::SrcSpan
 };
@@ -13,7 +13,7 @@ pub trait Postfix {
 #[derive(Debug)]
 pub struct Parsed {
     pub module: Module,
-    pub comments: Vec<SrcSpan>,
+    pub table: Vec<TableElement>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,64 +29,67 @@ pub struct Program {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Program {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Program {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
     ) -> Result<Self, crate::parser::prelude::ParseError> {
+        parser.skip_newline();
         let (start, mut end) = match parser.expect_one(Token::Begin) {
-            Ok((start, end)) => {
+            Ok((start, _)) => {
+                parser.skip_newline();
                 match parser.expect_one(Token::Var) {
-                    Ok((start, end)) => (start, end),
+                    Ok((_, end)) => (start, end),
                     Err(err) => return parse_error(ParseErrorType::ExpectedVar, err.span)
                 }
             },
             Err(err) => return parse_error(ParseErrorType::ExpectedBegin, err.span)
         };
 
-      
-
-        let mut statements = vec![];
+        let mut statements = vec![Statement::Declaration(Declaration::parse(parser, None)?)];
         let mut is_ended = false;
 
-        while let Some((start, token, _end)) = parser.current_token.take() {
-            if token != Token::End {
-                parser.current_token = Some((start, token, _end));
-
-                statements.push(Statement::parse(parser, None)?);
-
-                match (&parser.current_token, &parser.next_token) {
-                    (
-                        Some((start, Token::Semicolon, end)), 
-                        Some((_, Token::End, _))
-                    ) => return parse_error(
-                        ParseErrorType::UnexpectedSemicolonBeforeEnd, 
-                        SrcSpan { start: *start, end: *end }
-                    ),
-                    (Some((_, Token::Semicolon, _)), _) => parser.step(),
-                    (Some((_, Token::End, _)), _) => {
-                        is_ended = true;
-                        end = parser.next_token().unwrap().2;
-                        break 
+        while let Ok(_) = parser.expect_one(Token::Semicolon) {
+            println!("prog1 | {:?}, {:?}", parser.current_token, parser.next_token);
+            match Statement::parse(parser, None) {
+                Ok(stmt) => statements.push(stmt),
+                Err(parse_err) => match &parse_err.error {
+                    ParseErrorType::UnexpectedToken { 
+                        token, 
+                        .. 
+                    } => match token {
+                        Token::End => return parse_error(
+                            ParseErrorType::UnexpectedSemicolonBeforeEnd, 
+                            parse_err.span
+                        ),
+                        Token::Eof => return parse_error(
+                            ParseErrorType::UnexpectedEof,
+                            parse_err.span
+                        ),
+                        _ => return Err(parse_err)
                     },
-                    (None, _) => return parse_error(
-                        ParseErrorType::ExpectedEnd, 
-                        SrcSpan { start: 0, end: 0 }
-                    ),
-                    (Some((start, _, _)), _) => return parse_error(
-                        ParseErrorType::MissingSemicolon,
-                        SrcSpan { start: *start - 1, end: *start }
-                    ),
+                    _ => return Err(parse_err)
                 }
-            } else {
-                is_ended = true;
-                end = _end;
-                parser.step();
-                break;
             }
+            println!("prog2 | {:?}, {:?}", parser.current_token, parser.next_token);
         };
 
+        println!("prog3 | {:?}, {:?}", parser.current_token, parser.next_token);
+
+        if matches!(parser.current_token, Some((_, Token::End, _))) {
+            end = parser.current_token.as_ref().unwrap().2;
+            is_ended = true;
+        }
+
         if !is_ended {
+            if matches!(parser.current_token, Some(_)) {
+                let end = statements.last().unwrap().location().end;
+                return parse_error(
+                    ParseErrorType::MissingSemicolon, 
+                    SrcSpan { start: end, end: end + 1 }
+                )
+            }
+
             return parse_error(
                 ParseErrorType::ExpectedEnd,
                 SrcSpan { start: end, end: end + 1 }
@@ -100,71 +103,6 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for Program {
     }
 }
 
-
-// impl<T: Iterator<Item = LexResult>> Parse<T> for Program {
-//     fn parse(
-//         parser: &mut crate::parser::prelude::Parser<T>, 
-//         _precedence: Option<Precedence>
-//     ) -> Result<Self, crate::parser::prelude::ParseError> {
-//         let (start, mut end) = match parser.expect_one(Token::Begin) {
-//             Ok((start, end)) => (start, end),
-//             Err(err) => return parse_error(ParseErrorType::ExpectedBegin, err.span)
-//         };
-
-//         let mut statements = vec![];
-//         let mut is_ended = false;
-
-//         while let Some((start, token, _end)) = parser.current_token.take() {
-//             if token != Token::End {
-//                 parser.current_token = Some((start, token, _end));
-
-//                 statements.push(Statement::parse(parser, None)?);
-
-//                 match (&parser.current_token, &parser.next_token) {
-//                     (
-//                         Some((start, Token::Semicolon, end)), 
-//                         Some((_, Token::End, _))
-//                     ) => return parse_error(
-//                         ParseErrorType::UnexpectedSemicolonBeforeEnd, 
-//                         SrcSpan { start: *start, end: *end }
-//                     ),
-//                     (Some((_, Token::Semicolon, _)), _) => parser.step(),
-//                     (Some((_, Token::End, _)), _) => {
-//                         is_ended = true;
-//                         end = parser.next_token().unwrap().2;
-//                         break 
-//                     },
-//                     (None, _) => return parse_error(
-//                         ParseErrorType::ExpectedEnd, 
-//                         SrcSpan { start: 0, end: 0 }
-//                     ),
-//                     (Some((start, _, _)), _) => return parse_error(
-//                         ParseErrorType::MissingSemicolon,
-//                         SrcSpan { start: *start - 1, end: *start }
-//                     ),
-//                 }
-//             } else {
-//                 is_ended = true;
-//                 end = _end;
-//                 parser.step();
-//                 break;
-//             }
-//         };
-
-//         if !is_ended {
-//             return parse_error(
-//                 ParseErrorType::ExpectedEnd,
-//                 SrcSpan { start: end, end: end + 1 }
-//             )
-//         }
-
-//         Ok(Self {
-//             statements,
-//             location: SrcSpan { start, end }
-//         })
-//     }
-// }
-
 impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let statements = self.statements.iter()
@@ -175,16 +113,6 @@ impl Display for Program {
     }
 }
 
-impl Postfix for Program {
-    fn postfix(&self) -> String {
-        let statements = self.statements.iter()
-            .map(|statement| statement.postfix())
-            .collect::<Vec<String>>();
-        
-        format!("{} .", statements.join(" "))
-    }
-}
-
 // statement -> (<declaration> | <operator>)
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
@@ -192,11 +120,12 @@ pub enum Statement {
     Operator(Operator),
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Statement {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Statement {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
     ) -> Result<Self, crate::parser::prelude::ParseError> {
+        parser.skip_newline();
         let res = match parser.current_token {
             Some((_, Token::Var, _)) => Self::Declaration(Declaration::parse(parser, None)?),
             Some(_) => Self::Operator(Operator::parse(parser, None)?),
@@ -219,11 +148,11 @@ impl Display for Statement {
     }
 }
 
-impl Postfix for Statement {
-    fn postfix(&self) -> String {
+impl Statement {
+    pub fn location(&self) -> SrcSpan {
         match self {
-            Self::Declaration(declaration) => declaration.postfix(),
-            Self::Operator(operator) => operator.postfix()
+            Self::Declaration(decl) => decl.location,
+            Self::Operator(op) => op.location()
         }
     }
 }
@@ -242,12 +171,6 @@ impl Display for Identifiers {
             .collect::<Vec<String>>();
 
         write!(f, "{}: {}", names.join(", "), self.names_type)
-    }
-}
-
-impl Postfix for Identifiers {
-    fn postfix(&self) -> String {
-        format!("")
     }
 }
 
@@ -274,9 +197,9 @@ impl Display for IdentifierType {
 impl From<Token> for IdentifierType {
     fn from(value: Token) -> Self {
         match value {
-            Token::Bang => Self::Float,
-            Token::Percent => Self::Int,
-            Token::Dollar => Self::Bool,
+            Token::At => Self::Float,
+            Token::Hashtag => Self::Int,
+            Token::Ampersand => Self::Bool,
             _ => panic!("Invalid token to identifier type conversion")
         }
     }
@@ -289,7 +212,7 @@ pub struct Declaration {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Declaration {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Declaration {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
@@ -342,12 +265,6 @@ impl Display for Declaration {
     }
 }
 
-impl Postfix for Declaration {
-    fn postfix(&self) -> String {
-        format!("")
-    }
-}
-
 // operator -> <nested> | <assignment> | <conditional> | <fixed_loop> | <conditional_loop> | <input> | <output>
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
@@ -360,14 +277,14 @@ pub enum Operator {
     Output(Output),
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Operator {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Operator {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
     ) -> Result<Self, crate::parser::prelude::ParseError> {
+        parser.skip_newline();
         let res = match &parser.current_token {
             Some((start, token, end)) => match token {
-                // Token::Begin => Self::Nested(Nested::parse(parser, None)?),
                 Token::LSBracket => Self::Nested(Nested::parse(parser, None)?),
                 Token::Ident(_) => Self::Assignment(Assignment::parse(parser, None)?),
                 Token::If => Self::Conditional(Conditional::parse(parser, None)?),
@@ -407,20 +324,6 @@ impl Display for Operator {
     }
 }
 
-impl Postfix for Operator {
-    fn postfix(&self) -> String {
-        match self {
-            Self::Nested(nested) => nested.postfix(),
-            Self::Assignment(assignment) => assignment.postfix(),
-            Self::Conditional(conditional) => conditional.postfix(),
-            Self::FixedLoop(loop_) => loop_.postfix(),
-            Self::ConditionalLoop(loop_) => loop_.postfix(),
-            Self::Input(input) => input.postfix(),
-            Self::Output(output) => output.postfix()
-        }
-    }
-}
-
 impl Operator {
     pub fn location(&self) -> SrcSpan {
         match self {
@@ -442,52 +345,57 @@ pub struct Nested {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Nested {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Nested {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
     ) -> Result<Self, crate::parser::prelude::ParseError> {
-        let (start, mut end) = parser.expect_one(Token::Begin)?;
+        let (start, mut end) = parser.expect_one(Token::LSBracket)?;
 
-        let mut operators = vec![];
+        let mut operators = vec![Operator::parse(parser, None)?];
         let mut is_ended = false;
 
         while let Some((start, token, _end)) = parser.current_token.take() {
-            if token != Token::End {
-                parser.current_token = Some((start, token, _end));
+            if matches!(token, Token::Colon | Token::Newline) {
+                parser.step();
+                continue;
+            }
 
-                operators.push(Operator::parse(parser, None)?);
-
-
-                match (&parser.current_token, &parser.next_token) {
-                    (
-                        Some((start, Token::Colon, end)), 
-                        Some((_, Token::RSBracket, _))
-                    ) => return parse_error(
-                        ParseErrorType::UnexpectedColonBeforeRSBracket, 
-                        SrcSpan { start: *start, end: *end }
-                    ),
-                    (Some((_, Token::Colon, _)), _)  => parser.step(),
-                    (Some((_, Token::Newline, _)), _)  => parser.step(),
-                    (Some((_, Token::RSBracket, _)), _) => {
-                        is_ended = true;
-                        end = parser.next_token().unwrap().2;
-                        break 
-                    },
-                    (None, _) => return parse_error(
-                        ParseErrorType::ExpectedColon, 
-                        SrcSpan { start: 0, end: 0 }
-                    ),
-                    (Some((start, _, _)), _) => return parse_error(
-                        ParseErrorType::MissingColon,
-                        SrcSpan { start: *start - 1, end: *start }
-                    ),
-                }
-            } else {
+            if matches!(token, Token::RSBracket) {
                 is_ended = true;
                 end = _end;
                 parser.step();
                 break;
+            }
+
+            parser.current_token = Some((start, token, _end));
+
+            operators.push(Operator::parse(parser, None)?);
+
+
+            match (&parser.current_token, &parser.next_token) {
+                (
+                    Some((start, Token::Colon, end)), 
+                    Some((_, Token::RSBracket, _))
+                ) => return parse_error(
+                    ParseErrorType::UnexpectedColonBeforeRSBracket, 
+                    SrcSpan { start: *start, end: *end }
+                ),
+                (Some((_, Token::Colon, _)), _)  => parser.step(),
+                (Some((_, Token::Newline, _)), _)  => parser.step(),
+                (Some((_, Token::RSBracket, _)), _) => {
+                    is_ended = true;
+                    end = parser.next_token().unwrap().2;
+                    break 
+                },
+                (None, _) => return parse_error(
+                    ParseErrorType::ExpectedColon, 
+                    SrcSpan { start: 0, end: 0 }
+                ),
+                (Some((start, _, _)), _) => return parse_error(
+                    ParseErrorType::MissingColon,
+                    SrcSpan { start: *start - 1, end: *start }
+                ),
             }
         };
 
@@ -505,70 +413,7 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for Nested {
     }
 }
 
-// impl<T: Iterator<Item = LexResult>> Parse<T> for Nested {
-//     fn parse(
-//         parser: &mut crate::parser::prelude::Parser<T>, 
-//         _precedence: Option<Precedence>
-//     ) -> Result<Self, crate::parser::prelude::ParseError> {
-//         let (start, mut end) = parser.expect_one(Token::Begin)?;
 
-//         let mut operators = vec![];
-//         let mut is_ended = false;
-
-//         while let Some((start, token, _end)) = parser.current_token.take() {
-//             if token != Token::End {
-//                 parser.current_token = Some((start, token, _end));
-
-//                 // println!("nest1 | {:?}, {:?}", parser.current_token, parser.next_token);
-
-//                 operators.push(Operator::parse(parser, None)?);
-
-//                 // println!("nest2 | {:?}, {:?}", parser.current_token, parser.next_token);
-
-//                 match (&parser.current_token, &parser.next_token) {
-//                     (
-//                         Some((start, Token::Semicolon, end)), 
-//                         Some((_, Token::End, _))
-//                     ) => return parse_error(
-//                         ParseErrorType::UnexpectedSemicolonBeforeEnd, 
-//                         SrcSpan { start: *start, end: *end }
-//                     ),
-//                     (Some((_, Token::Semicolon, _)), _) => parser.step(),
-//                     (Some((_, Token::End, _)), _) => {
-//                         is_ended = true;
-//                         end = parser.next_token().unwrap().2;
-//                         break 
-//                     },
-//                     (None, _) => return parse_error(
-//                         ParseErrorType::ExpectedEnd, 
-//                         SrcSpan { start: 0, end: 0 }
-//                     ),
-//                     (Some((start, _, _)), _) => return parse_error(
-//                         ParseErrorType::MissingSemicolon,
-//                         SrcSpan { start: *start - 1, end: *start }
-//                     ),
-//                 }
-//             } else {
-//                 is_ended = true;
-//                 end = _end;
-//                 parser.step();
-//                 break;
-//             }
-//         };
-
-//         if !is_ended {
-//             return parse_error(
-//                 ParseErrorType::ExpectedEnd,
-//                 SrcSpan { start: end, end: end + 1 }
-//             )
-//         }
-
-//         Ok(Self {
-//             operators,
-//             location: SrcSpan { start, end }
-//         })
-//     }
-// }
 
 impl Display for Nested {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -598,7 +443,7 @@ pub struct Assignment {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Assignment {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Assignment {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>,
         _precedence: Option<Precedence>
@@ -641,7 +486,7 @@ pub struct Conditional {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Conditional {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Conditional {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
@@ -678,45 +523,6 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for Conditional {
     }
 }
 
-// conditional -> if "("<expression>")" <operator> [else <operator>]
-
-// impl<T: Iterator<Item = LexResult>> Parse<T> for Conditional {
-//     fn parse(
-//         parser: &mut crate::parser::prelude::Parser<T>, 
-//         _precedence: Option<Precedence>
-//     ) -> Result<Self, crate::parser::prelude::ParseError> {
-//         let (start, _) = parser.expect_one(Token::If)?;
-//         let _ = parser.expect_one(Token::LParen)?;
-
-//         let condition = Expression::parse(parser, None)?;
-        
-//         let _ = parser.expect_one(Token::RParen)?;
-
-//         let resolution = Box::new(Operator::parse(parser, None)?);
-
-//         let mut end = resolution.location().end;
-
-//         let alternative = match parser.expect_one(Token::Else) {
-//             Ok((_, _)) => {
-//                 let alternative = Operator::parse(parser, None)?;
-
-//                 end = alternative.location().end;
-
-//                 Some(Box::new(alternative))
-//             },
-//             Err(_) => None
-//         };
-
-//         let location = SrcSpan { start, end };
-
-//         Ok(Self {
-//             condition,
-//             resolution,
-//             alternative,
-//             location
-//         })
-//     }
-// }
 
 impl Display for Conditional {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -761,7 +567,7 @@ pub struct FixedLoop {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for FixedLoop {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for FixedLoop {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
@@ -776,7 +582,7 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for FixedLoop {
 
         let block = Box::new(Operator::parse(parser, None)?);
 
-        let location = SrcSpan { start, end };
+        let location = SrcSpan { start, end: block.location().end };
 
         Ok(Self {
             assignment,
@@ -787,57 +593,13 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for FixedLoop {
     }
 }
 
-// impl<T: Iterator<Item = LexResult>> Parse<T> for FixedLoop {
-//     fn parse(
-//         parser: &mut crate::parser::prelude::Parser<T>, 
-//         _precedence: Option<Precedence>
-//     ) -> Result<Self, crate::parser::prelude::ParseError> {
-//         let (start, _) = parser.expect_one(Token::For)?;
-
-//         let assignment = Assignment::parse(parser, None)?;
-//         let _ = parser.expect_one(Token::To);
-
-//         let to = Expression::parse(parser, None)?;
-
-//         let step = match parser.expect_one(Token::Step) {
-//             Ok(_) => Some(Expression::parse(parser, None)?),
-//             Err(_) => None
-//         };
-
-//         let block = Box::new(Operator::parse(parser, None)?);
-//         let (_, end) = parser.expect_one(Token::Next)?;
-
-//         let location = SrcSpan { start, end };
-
-//         Ok(Self {
-//             assignment,
-//             to,
-//             step,
-//             block,
-//             location
-//         })
-//     }
-// }
-
 impl Display for FixedLoop {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "for {} to {}{} {} next",
+        write!(f, "for {} val {} {} next",
             self.assignment,
-            self.to,
-            if self.step.is_some() {
-                format!(" step {}", self.step.as_ref().unwrap())
-            } else {
-                "".to_string()
-            },
+            self.val,
             self.block
         )
-    }
-}
-
-impl Postfix for FixedLoop {
-    fn postfix(&self) -> String {
-        todo!()
-        // format!("{} for {} to {} step next {}")
     }
 }
 
@@ -849,7 +611,7 @@ pub struct ConditionalLoop {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for ConditionalLoop {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for ConditionalLoop {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
@@ -861,7 +623,7 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for ConditionalLoop {
         let _ = parser.expect_one(Token::Do)?;
 
         let block = Box::new(Operator::parse(parser, None)?);
-        let end = block.location().end;
+        let (_, end) = parser.expect_one(Token::Next)?;
 
         let location = SrcSpan { start, end };
 
@@ -873,34 +635,9 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for ConditionalLoop {
     }
 }
 
-// impl<T: Iterator<Item = LexResult>> Parse<T> for ConditionalLoop {
-//     fn parse(
-//         parser: &mut crate::parser::prelude::Parser<T>, 
-//         _precedence: Option<Precedence>
-//     ) -> Result<Self, crate::parser::prelude::ParseError> {
-//         let (start, _) = parser.expect_one(Token::While)?;
-
-//         let _ = parser.expect_one(Token::LParen)?;
-
-//         let condition = Expression::parse(parser, None)?;
-//         let _ = parser.expect_one(Token::RParen)?;
-
-//         let block = Box::new(Operator::parse(parser, None)?);
-//         let end = block.location().end;
-
-//         let location = SrcSpan { start, end };
-
-//         Ok(Self {
-//             condition,
-//             block,
-//             location
-//         })
-//     }
-// }
-
 impl Display for ConditionalLoop {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "while ({}) {}", self.condition, self.block)
+        write!(f, "while {} {}", self.condition, self.block)
     }
 }
 
@@ -917,7 +654,7 @@ pub struct Input {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Input {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Input {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
@@ -926,12 +663,8 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for Input {
 
         let mut identifiers = vec![Identifier::from(parser.expect_ident()?)];
 
-        // while let Ok(_) = parser.expect_one(Token::Space) {
-        //     identifiers.push(parser.expect_ident()?.into());
-        // }
-
-        while let Ok(_) = parser.expect_ident() {
-            identifiers.push(Ok(()));
+        while let Ok(tok) = parser.expect_ident() {
+            identifiers.push(tok.into());
         }
 
         let end = identifiers.iter().last().unwrap().location.end;
@@ -972,7 +705,7 @@ pub struct Output {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Output {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Output {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
@@ -1029,12 +762,12 @@ pub enum Expression {
     }
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Expression {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Expression {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         precedence: Option<Precedence>
     ) -> Result<Self, crate::parser::prelude::ParseError> {
-        // println!("{:?}, {:?}", parser.current_token, parser.next_token);
+        println!("{:?}, {:?}", parser.current_token, parser.next_token);
         let mut expr = match &parser.current_token {
             Some((start, token, end)) => match token {
                 Token::Ident(_) => {
@@ -1042,7 +775,7 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for Expression {
 
                     Self::Identifier(Identifier::from((start, ident, end)))
                 },
-                Token::Bang => Self::Prefix(Prefix::parse(parser, None)?),
+                Token::Tilda => Self::Prefix(Prefix::parse(parser, None)?),
                 Token::Int(_)
                 | Token::Float(_) 
                 | Token::True 
@@ -1077,7 +810,7 @@ impl<T: Iterator<Item = LexResult>> Parse<T> for Expression {
             .is_some_and(|token| token.1 != Token::Semicolon) && 
             precedence.unwrap_or(Precedence::Lowest) < parser.current_precedence() 
         {
-            // println!("hey");
+            println!("hey");
             expr = match &parser.current_token {
                 Some((_, next_token, _)) => match next_token {
                     Token::Plus | Token::Minus | Token::Div | 
@@ -1164,7 +897,7 @@ pub struct Infix {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> InfixParse<T> for Infix {
+impl<T: Iterator<Item = LexResult> + DisplayTable> InfixParse<T> for Infix {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         left: Expression, 
@@ -1223,7 +956,7 @@ pub struct Prefix {
     pub location: SrcSpan
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Prefix {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Prefix {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
@@ -1270,7 +1003,7 @@ pub enum Primitive {
     }
 }
 
-impl<T: Iterator<Item = LexResult>> Parse<T> for Primitive {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parse<T> for Primitive {
     fn parse(
         parser: &mut crate::parser::prelude::Parser<T>, 
         _precedence: Option<Precedence>
@@ -1315,8 +1048,7 @@ impl Display for Primitive {
         match self {
             Self::Int { value, .. } => write!(f, "{value}"),
             Self::Float { value, .. } => write!(f, "{value}"),
-            Self::Bool { value, .. } => write!(f, "{value}"),
-            Self::String { value, .. } => write!(f, "\"{value}\"")
+            Self::Bool { value, .. } => write!(f, "{value}")
         }
     }
 }
@@ -1326,8 +1058,7 @@ impl Primitive {
         match self {
             Self::Int { location, .. } |
             Self::Float { location, .. } |
-            Self::Bool { location, .. } |
-            Self::String { location, .. } => *location
+            Self::Bool { location, .. } => *location
         }
     }
 }

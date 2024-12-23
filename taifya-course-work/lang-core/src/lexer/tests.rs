@@ -130,7 +130,7 @@ fn test_input() -> std::result::Result<(), LexicalError> {
 
         for e assign 5 val e LT 10 do [
             e assign e plus 1
-            displ(4 plus 13,6 div 3) : enter(e a)
+            displ(4 plus 13.6 div 3) : enter(e a)
         ];
 
         if ~d then displ(true) else displ(false) end;
@@ -180,7 +180,7 @@ fn test_input() -> std::result::Result<(), LexicalError> {
 
         Token::Ident(String::from("b")),
         Token::Assign,
-        Token::Int(13e+4),
+        Token::Int(1300000),
         Token::Semicolon,
         Token::Newline,
         
@@ -258,7 +258,7 @@ fn test_input() -> std::result::Result<(), LexicalError> {
         Token::LParen,
         Token::Int(4),
         Token::Plus,
-        Token::Int(13.6),
+        Token::Float(13.6),
         Token::Div,
         Token::Int(3),
         Token::RParen,

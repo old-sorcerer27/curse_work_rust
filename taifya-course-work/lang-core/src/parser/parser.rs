@@ -1,8 +1,8 @@
-use crate::{lexer::prelude::{LexResult, LexicalError, Lexer, Spanned, Token}, utils::prelude::SrcSpan};
+use crate::{lexer::{prelude::{LexResult, Lexer, LexicalError, Spanned, Token}, table_element::DisplayTable}, utils::prelude::SrcSpan};
 use super::error::{ParseError, ParseErrorType};
 use super::ast::{Parsed, Program, Expression, Module, IdentifierType};
 
-pub trait Parse<T: Iterator<Item = LexResult>>
+pub trait Parse<T: Iterator<Item = LexResult> + DisplayTable>
     where Self: Sized,
 {
     fn parse(
@@ -11,7 +11,7 @@ pub trait Parse<T: Iterator<Item = LexResult>>
     ) -> Result<Self, ParseError>;
 }
 
-pub trait InfixParse<T: Iterator<Item = LexResult>>
+pub trait InfixParse<T: Iterator<Item = LexResult> + DisplayTable>
     where Self: Sized,
 {
     fn parse(
@@ -21,7 +21,7 @@ pub trait InfixParse<T: Iterator<Item = LexResult>>
     ) -> Result<Self, ParseError>;
 }
 
-pub struct Parser<T: Iterator<Item = LexResult>> {
+pub struct Parser<T: Iterator<Item = LexResult> + DisplayTable> {
     pub current_token: Option<Spanned>,
     pub next_token: Option<Spanned>,
     pub comments: Vec<SrcSpan>,
@@ -30,7 +30,7 @@ pub struct Parser<T: Iterator<Item = LexResult>> {
     tokens: T,
 }
 
-impl<T: Iterator<Item = LexResult>> Parser<T> {
+impl<T: Iterator<Item = LexResult> + DisplayTable> Parser<T> {
     pub fn new(input: T) -> Self {
         let mut parser = Self {
             current_token: None,
@@ -82,7 +82,7 @@ impl<T: Iterator<Item = LexResult>> Parser<T> {
         t
     }
 
-    pub fn skip_newline(&self) {
+    pub fn skip_newline(&mut self) {
         while let Some((_, Token::Newline, _)) = self.current_token {
             self.step();
         }
@@ -116,11 +116,12 @@ impl<T: Iterator<Item = LexResult>> Parser<T> {
 
         Ok(Parsed {
             module,
-            comments: Default::default()
+            table: self.tokens.get_table_listing().clone()
         })
     }
 
     pub fn expect_one(&mut self, token: Token) -> Result<(u32, u32), ParseError> {
+        self.skip_newline();
         match self.current_token.take() {
             Some((start, tok, end)) if tok == token => {
                 self.step();
@@ -150,6 +151,7 @@ impl<T: Iterator<Item = LexResult>> Parser<T> {
     }
 
     pub fn expect_ident(&mut self) -> Result<(u32, String, u32), ParseError> {
+        self.skip_newline();
         match self.current_token.take() {
             Some((start, Token::Ident(value), end)) => {
                 self.step();
@@ -177,6 +179,7 @@ impl<T: Iterator<Item = LexResult>> Parser<T> {
 
     pub fn parse_type_annotation(&mut self, start_token: Token) -> Result<(u32, IdentifierType, u32), ParseError> {
         let (start, end) = self.expect_one(start_token)?;
+        self.skip_newline();
 
         match self.current_token.take() {
             Some((start, token, end)) if token.is_variable_type() => {

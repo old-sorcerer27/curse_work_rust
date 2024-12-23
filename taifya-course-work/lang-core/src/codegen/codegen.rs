@@ -280,11 +280,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
                 self.compile_operator(&loop_.block);
 
-                let step = loop_.step.as_ref()
-                    .map(|step| self.compile_expression(step).unwrap().into_int_value())
-                    .unwrap_or_else(|| self.context.i64_type().const_int(1, false));
-
-                let to = self.compile_expression(&loop_.to).unwrap().into_int_value();
+                let to = self.compile_expression(&loop_.val).unwrap().into_int_value();
 
                 let cur_value = self.builder.build_load(
                     variable_type, 
@@ -293,7 +289,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 ).unwrap();
                 let next_value = self.builder.build_int_nsw_add(
                     cur_value.into_int_value(),
-                    step,
+                    self.context.i64_type().const_int(1, false),
                     "nextval"
                 ).unwrap();
 
@@ -347,12 +343,12 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                             right.into_int_value(), 
                             "intsub"
                         ).unwrap().into(),
-                        Token::Asterisk => self.builder.build_int_mul(
+                        Token::Mult => self.builder.build_int_mul(
                             left.into_int_value(),
                             right.into_int_value(),
                             "intmul"
                         ).unwrap().into(),
-                        Token::Slash => {
+                        Token::Div => {
                             let float_type = self.context.f64_type();
                             let left_cast = self.builder.build_unsigned_int_to_float(
                                 left.into_int_value(), 
@@ -454,12 +450,12 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                             right.into_float_value(), 
                             "floatsub"
                         ).unwrap().into(),
-                        Token::Asterisk => self.builder.build_float_mul(
+                        Token::Mult => self.builder.build_float_mul(
                             left.into_float_value(),
                             right.into_float_value(),
                             "floatmul"
                         ).unwrap().into(),
-                        Token::Slash => self.builder.build_float_div(
+                        Token::Div => self.builder.build_float_div(
                             left.into_float_value(),
                             right.into_float_value(),
                             "floatdiv"
@@ -484,7 +480,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             Expression::Prefix(prefix) => {
                 let expr = self.compile_expression(&prefix.expression)?;
                 match prefix.operator {
-                    Token::Bang => Ok(expr.into_int_value()
+                    Token::Tilda => Ok(expr.into_int_value()
                         .const_neg()
                         .as_basic_value_enum()
                     ),
@@ -501,15 +497,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                     .as_basic_value_enum(),
                 Primitive::Bool { value, .. } => self.context.bool_type()
                     .const_int(*value as u64, false)
-                    .as_basic_value_enum(),
-                Primitive::String { value, .. } => {
-                    let string_ptr = self.global_strings
-                        .entry(value.to_string())
-                        .or_insert_with(|| unsafe {
-                            self.builder.build_global_string(value, "").unwrap().as_pointer_value()
-                        });
-                    (*string_ptr).into()
-                }
+                    .as_basic_value_enum()
             })
         }
     }

@@ -6,11 +6,11 @@ mod compiler;
 #[cfg(feature = "compiler")]
 use compiler::{ObjectCompiler, ObjectLinker};
 
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use std::{path::PathBuf, rc::Rc};
 
 use clap::Parser;
 use cli::{
-    print_analyzed, print_analyzing, print_running 
+    print_analyzed, print_analyzing
 };
 #[cfg(feature = "compiler")]
 use cli::{
@@ -21,8 +21,7 @@ use inkwell::context::Context;
 #[allow(unused_imports)]
 use lang_core::{
     analyzer::{analyze, analyze_from_stream},
-    environment::prelude::Environment, 
-    eval::eval, 
+    environment::prelude::Environment,
     utils::prelude::{Warning, WarningEmitterIO}
 };
 #[cfg(feature = "compiler")]
@@ -40,12 +39,9 @@ enum Command {
         /// Print ast instead of parsed source code
         #[arg(long, default_value_t = false)]
         print_ast: bool,
-    },
-    /// Performs lexical, syntactical and semantical analysis
-    /// and runs it in interpreter mode
-    Run {
-        /// Path of source file
-        path: PathBuf,
+        /// Show table listing
+        #[arg(short, long, default_value_t = false)]
+        show_table_listing: bool
     },
     /// Performs lexical, syntactical and semantical analysis
     /// and compiles it in executable file
@@ -77,7 +73,7 @@ enum Command {
 
 fn main() {
     let _ = match Command::parse() {
-        Command::Analyze { path, no_output, print_ast } => {
+        Command::Analyze { path, no_output, print_ast, show_table_listing } => {
             let warning_emitter = Rc::new(ConsoleWarningEmitter);
 
             let buf_writer = crate::cli::stderr_buffer_writer();
@@ -86,7 +82,7 @@ fn main() {
             print_analyzing(path.to_str().unwrap());
             let start = std::time::Instant::now();
 
-            match analyze_from_stream(path, warning_emitter.clone()) {
+            match analyze_from_stream(path, warning_emitter.clone(), show_table_listing) {
                 Ok(module) => {
                     if !no_output {
                         if print_ast {
@@ -106,37 +102,6 @@ fn main() {
 
             print_analyzed(std::time::Instant::now() - start);
         },
-        Command::Run {
-            path
-        } => {
-            let warning_emitter = Rc::new(ConsoleWarningEmitter);
-
-            let buf_writer = crate::cli::stderr_buffer_writer();
-            let mut buf = buf_writer.buffer();
-
-            print_analyzing(path.to_str().unwrap());
-            let start = std::time::Instant::now();
-
-            match analyze_from_stream(path.clone(), warning_emitter.clone()) {
-                Ok(module) => {
-                    print_analyzed(std::time::Instant::now() - start);
-
-                    let env = Rc::new(RefCell::new(Environment::new()));
-
-                    print_running(path.to_str().unwrap());
-
-                    eval(module, env);
-                },
-                Err(err) => {
-                    err.pretty(&mut buf);
-                    buf_writer
-                        .print(&buf)
-                        .expect("Writing warning to stderr");
-
-                    print_analyzed(std::time::Instant::now() - start);
-                }
-            };
-        },
         #[cfg(feature = "compiler")]
         Command::Compile { 
             path, 
@@ -154,7 +119,7 @@ fn main() {
             print_analyzing(path.to_str().unwrap());
             let start = std::time::Instant::now();
 
-            let analyzed = match analyze_from_stream(path.clone(), warning_emitter.clone()) {
+            let analyzed = match analyze_from_stream(path.clone(), warning_emitter.clone(), false) {
                 Ok(module) => module,
                 Err(err) => {
                     err.pretty(&mut buf);

@@ -43,7 +43,7 @@ pub fn str_to_keyword(word: &str) -> Option<Token> {
 		"false" => Token::False,
 
 		"enter" => Token::Enter,
-		"output" => Token::Enter,
+		"displ" => Token::Displ,
 
 	
 		_ => return None
@@ -102,8 +102,6 @@ impl<T: Iterator<Item = (u32, char)>> Lexer<T> {
     }
 
     pub fn next_token(&mut self) -> LexResult {
-		self.skip_whitespace();
-
 		let span  = match self.ch {
 			Some(ch) => match ch {
 				'%'  => return self.lex_comment(),

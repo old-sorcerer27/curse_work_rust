@@ -226,7 +226,7 @@ impl ModuleAnalyzer {
                     });
                 }
 
-                let to_type = match get_expression_type(&loop_.to, env) {
+                let to_type = match get_expression_type(&loop_.val, env) {
                     Ok(type_) => type_,
                     Err(err) => {
                         self.problems.error(err);
@@ -236,28 +236,10 @@ impl ModuleAnalyzer {
 
                 if to_type != ValueType::Integer {
                     self.problems.error(AnalyzeError::TypeMismatch { 
-                        location: loop_.to.location(),
+                        location: loop_.val.location(),
                         expected: ValueType::Integer,
                         got: to_type
                     });
-                }
-
-                if let Some(step) = &loop_.step {
-                    let step_type = match get_expression_type(&step, env) {
-                        Ok(type_) => type_,
-                        Err(err) => {
-                            self.problems.error(err);
-                            return;
-                        }
-                    };
-
-                    if step_type != ValueType::Integer {
-                        self.problems.error(AnalyzeError::TypeMismatch { 
-                            location: step.location(),
-                            expected: ValueType::Integer,
-                            got: step_type
-                        });
-                    }
                 }
 
                 self.analyze_operator(&loop_.block, env);
@@ -332,7 +314,6 @@ fn get_primitive_type(primitive: &Primitive) -> ValueType {
     match primitive {
         Primitive::Int { .. } => ValueType::Integer,
         Primitive::Float { .. } => ValueType::Float,
-        Primitive::String { .. } => ValueType::String,
         Primitive::Bool { .. } => ValueType::Boolean,
     }
 }
@@ -383,7 +364,7 @@ fn get_infix_type(
             | Token::GreaterThanOrEqual
             | Token::Equal
             | Token::NotEqual => ValueType::Boolean,
-            Token::Slash => ValueType::Float,
+            Token::Div => ValueType::Float,
             _ => value_type
         },
         ValueType::Float => match infix.operator {
@@ -405,7 +386,7 @@ fn get_prefix_type(
     let expression_type = get_expression_type(&prefix.expression, env)?;
 
     match (&prefix.operator, &expression_type) {
-        (Token::Bang, ValueType::Boolean) => Ok(expression_type),
+        (Token::Tilda, ValueType::Boolean) => Ok(expression_type),
         (token, _) => Err(AnalyzeError::InvalidUnaryOperation { location: prefix.location, token: token.clone() })
     }
 }
@@ -418,8 +399,8 @@ fn get_allowed_types_for(operator: &Token) -> Vec<ValueType> {
     match operator {
         Token::Plus => vec![ValueType::Integer, ValueType::Float],
         Token::Minus
-        | Token::Asterisk
-        | Token::Slash => vec![ValueType::Integer, ValueType::Float],
+        | Token::Mult
+        | Token::Div => vec![ValueType::Integer, ValueType::Float],
         Token::And
         | Token::Or => vec![ValueType::Boolean],
         Token::LessThan

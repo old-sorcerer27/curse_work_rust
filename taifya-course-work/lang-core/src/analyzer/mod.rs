@@ -13,7 +13,7 @@ use std::{path::PathBuf, rc::Rc};
 use utf8_chars::BufReadCharsExt;
 
 use crate::{
-    analyzer::prelude::{ModuleAnalyzer, Outcome}, parser::{parser::parse_module_from_stream, prelude::{parse_module, Module}}, utils::prelude::{Error, SrcSpan, TypeWarningEmitter, WarningEmitter, WarningEmitterIO}
+    analyzer::prelude::{ModuleAnalyzer, Outcome}, lexer::table_element::TableElement, parser::{parser::parse_module_from_stream, prelude::{parse_module, Module}}, utils::prelude::{Error, SrcSpan, TypeWarningEmitter, WarningEmitter, WarningEmitterIO}
 };
 
 
@@ -62,6 +62,7 @@ pub fn analyze(
 pub fn analyze_from_stream(
     path: PathBuf,
     warnings: Rc<dyn WarningEmitterIO>,
+    show_all: bool
 ) -> Result<Module, Error> {
     let warnings = WarningEmitter::new(warnings);
     let file = match std::fs::File::open(path.clone()) {
@@ -111,6 +112,38 @@ pub fn analyze_from_stream(
 
     let result = match outcome {
         Outcome::Ok(module) => {
+            let mut idents = parsed.table.iter()
+                .filter(|el| el.table == 2)
+                .collect::<Vec<&TableElement>>();
+
+            idents.sort_by_key(|el| el.idx);
+            idents.dedup_by_key(|el| el.idx);
+                
+            let idents = idents.iter()
+                .map(|el| el.to_string_with_token())
+                .collect::<Vec<String>>()
+                .join("\n");
+
+            let mut numbers = parsed.table.iter()
+                .filter(|el| el.table == 3)
+                .collect::<Vec<&TableElement>>();
+
+            numbers.sort_by_key(|el| el.idx);
+            numbers.dedup_by_key(|el| el.idx);
+                
+            let numbers = numbers.iter()
+                .map(|el| el.to_string_with_token())
+                .collect::<Vec<String>>()
+                .join("\n");
+
+            println!("Идентификаторы:\n{}\n", idents);
+            println!("Числа:\n{}\n", numbers);
+            if show_all {
+                println!("{}\n", parsed.table.into_iter().map(|el| el.to_string_with_token()).collect::<Vec<String>>().join("\n"))
+            } else {
+                println!("{}\n", parsed.table.into_iter().map(|el| el.to_string()).collect::<Vec<String>>().join(" "))
+            }
+
             Ok(module)
         },
         Outcome::PartialFailure(_, errors) => {

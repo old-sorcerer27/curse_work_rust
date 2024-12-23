@@ -1,12 +1,12 @@
-% Начало программы %
 begin
     var
         % Объявление переменных %
         var a, b, c, d, f: #;
             e: @;;
+           
 
 
-    a assign 5o plus 10 mult 12h minus 0101b;
+    a assign 5o;
 
     for c assign 1 val 10 do enter c;
 
@@ -17,9 +17,9 @@ begin
     enter d;
 
     if d EQ 13 then b assign 10h
-    else begin 
+    else [
         b assign 10o : e assign 12.34
         f assign 4
-    end
+    ]
 
 end
