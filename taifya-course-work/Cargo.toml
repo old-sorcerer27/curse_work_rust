@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["langc", "lang-core"]
+
+[workspace.dependencies]
+termcolor = "1.4.1"
+inkwell = { version = "0.5.0", features = ["llvm18-0"] }
+llvm-sys = "180"
+
+[profile.release]
+strip = true      # Automatically strip symbols from the binary.
+opt-level = "z"   # Optimize for size.
+lto = true
+codegen-units = 1
+panic = "abort"

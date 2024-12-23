@@ -1,0 +1,21 @@
+[package]
+name = "langc"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+# If you want to change LLVM linking behavior (dynamic linking does not work on Windows)
+# compiler-dynamic = ["compiler", "llvm-sys/force-dynamic"]
+# compiler = ["dep:inkwell", "dep:llvm-sys"]                # Using default static linking
+compiler-dynamic = ["llvm", "lang-core/compiler-dynamic"]
+compiler = ["llvm", "lang-core/compiler"]
+llvm = ["dep:inkwell", "dep:llvm-sys"]
+
+[dependencies]
+lang-core = { path = "../lang-core" }
+ctrlc = { version = "3", features = ["termination"] }
+clap = { version = "4.5.18", features = ["derive"] }
+termcolor = { workspace = true }
+inkwell = { workspace = true, optional = true }
+llvm-sys = { workspace = true, optional = true }

@@ -1,0 +1,18 @@
+[package]
+name = "lang-core"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# If you want to change LLVM linking behavior (dynamic linking does not work on Windows)
+compiler-dynamic = ["compiler", "llvm-sys/force-dynamic"]
+compiler = ["dep:inkwell", "dep:llvm-sys"]                # Using default static linking
+
+[dependencies]
+codespan-reporting = "0.11.1"
+thiserror = "1.0.64"
+utf8-chars = "3.0.5"
+
+termcolor = { workspace = true }
+inkwell = { workspace = true, optional = true }
+llvm-sys = { workspace = true, optional = true }
